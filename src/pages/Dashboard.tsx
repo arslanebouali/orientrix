@@ -1,20 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { 
-  Users, 
-  UserCheck, 
-  FileText, 
-  TrendingUp, 
-  Clock,
-  Award,
-  AlertTriangle,
-  CheckCircle2,
-  ArrowRight,
-  Calendar,
-  Target,
-  GraduationCap,
-  Sitemap
-} from 'lucide-react';
+import { Users, UserCheck, FileText, TrendingUp, Clock, Award, AlertTriangle, CheckCircle2, ArrowRight, Calendar, Target, GraduationCap, Sigma as Sitemap } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
