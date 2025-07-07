@@ -101,7 +101,7 @@ const Sidebar: React.FC = () => {
       </nav>
       
       {/* User Info at Bottom */}
-      <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-100 bg-white">
+      <div className="mt-auto p-4 border-t border-gray-100 bg-white">
         <div className="flex items-center space-x-3 p-3 bg-gradient-to-r from-slate-50 to-blue-50 rounded-xl">
           <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white font-medium shadow-sm">
             {user?.firstName?.[0]}{user?.lastName?.[0]}
