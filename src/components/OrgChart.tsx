@@ -31,6 +31,8 @@ const OrgChart: React.FC = () => {
   const [hoveredEmployee, setHoveredEmployee] = useState<Employee | null>(null);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [expandedDepartments, setExpandedDepartments] = useState<Set<string>>(new Set());
+  const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'board' | 'detailed'>('board');
 
   // Department colors
   const departmentColors = {
@@ -118,6 +120,16 @@ const OrgChart: React.FC = () => {
     setExpandedDepartments(newExpanded);
   };
 
+  const viewDepartmentDetails = (deptName: string) => {
+    setSelectedDepartment(deptName);
+    setViewMode('detailed');
+  };
+
+  const backToBoard = () => {
+    setViewMode('board');
+    setSelectedDepartment(null);
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active': return 'ring-2 ring-emerald-400';
@@ -138,6 +150,183 @@ const OrgChart: React.FC = () => {
     return Target;
   };
 
+  // Detailed Department View
+  if (viewMode === 'detailed' && selectedDepartment) {
+    const department = departmentGroups.find(dept => dept.name === selectedDepartment);
+    if (!department) return null;
+
+    return (
+      <div className="space-y-6 sm:space-y-8">
+        {/* Header with Back Button */}
+        <div className="flex items-center space-x-4">
+          <button
+            onClick={backToBoard}
+            className="flex items-center space-x-2 px-4 py-2 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+          >
+            <ChevronDown className="w-4 h-4 rotate-90" />
+            <span>Back to Overview</span>
+          </button>
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">{department.name} Department</h1>
+            <p className="text-slate-600 mt-1">Detailed organizational structure and team members</p>
+          </div>
+        </div>
+
+        {/* Department Stats */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+          <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500 font-medium">Total Members</p>
+                <p className="text-2xl font-bold text-slate-800">{department.employees.length}</p>
+              </div>
+              <Users className="w-8 h-8 text-blue-500" />
+            </div>
+          </div>
+          <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500 font-medium">Active</p>
+                <p className="text-2xl font-bold text-emerald-600">
+                  {department.employees.filter(emp => emp.status === 'active').length}
+                </p>
+              </div>
+              <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
+                <div className="w-3 h-3 bg-emerald-500 rounded-full"></div>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500 font-medium">Onboarding</p>
+                <p className="text-2xl font-bold text-blue-600">
+                  {department.employees.filter(emp => emp.status === 'onboarding').length}
+                </p>
+              </div>
+              <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500 font-medium">Avg Progress</p>
+                <p className="text-2xl font-bold text-orange-600">
+                  {Math.round(department.employees.reduce((acc, emp) => acc + (emp.onboardingProgress || 0), 0) / department.employees.length)}%
+                </p>
+              </div>
+              <Target className="w-8 h-8 text-orange-500" />
+            </div>
+          </div>
+        </div>
+
+        {/* Department Manager Card */}
+        {department.manager && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h3 className="text-lg font-semibold text-slate-800 mb-4">Department Manager</h3>
+            <div className="flex items-center space-x-4">
+              <div className={`relative w-16 h-16 bg-gradient-to-br from-slate-600 to-slate-700 rounded-2xl flex items-center justify-center text-white font-bold text-lg shadow-lg ${getStatusColor(department.manager.status)}`}>
+                {department.manager.firstName[0]}{department.manager.lastName[0]}
+                <div className="absolute -top-2 -right-2 w-6 h-6 bg-amber-400 rounded-full flex items-center justify-center">
+                  <Crown className="w-4 h-4 text-white" />
+                </div>
+              </div>
+              <div className="flex-1">
+                <h4 className="text-xl font-semibold text-slate-800">
+                  {department.manager.firstName} {department.manager.lastName}
+                </h4>
+                <p className="text-slate-600 mb-2">{department.manager.position}</p>
+                <div className="flex flex-wrap gap-4 text-sm text-slate-500">
+                  <div className="flex items-center space-x-1">
+                    <Mail className="w-4 h-4" />
+                    <span>{department.manager.email}</span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <Calendar className="w-4 h-4" />
+                    <span>Started {department.manager.startDate}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Team Members Grid */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+          <div className="p-6 border-b border-gray-100">
+            <h3 className="text-lg font-semibold text-slate-800">Team Members</h3>
+          </div>
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {department.employees
+                .filter(emp => emp.id !== department.manager?.id)
+                .map((employee) => {
+                  const RoleIcon = getRoleIcon(employee.role);
+                  return (
+                    <div
+                      key={employee.id}
+                      className="border border-gray-100 rounded-xl p-4 hover:shadow-md transition-all duration-200"
+                    >
+                      <div className="flex items-center space-x-3 mb-3">
+                        <div className={`relative w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center text-white font-semibold shadow-sm ${getStatusColor(employee.status)}`}>
+                          {employee.firstName[0]}{employee.lastName[0]}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-semibold text-slate-800 truncate">
+                            {employee.firstName} {employee.lastName}
+                          </h4>
+                          <p className="text-sm text-slate-600 truncate">{employee.position}</p>
+                        </div>
+                        <RoleIcon className="w-5 h-5 text-slate-400" />
+                      </div>
+                      
+                      <div className="space-y-2 text-sm text-slate-500">
+                        <div className="flex items-center space-x-2">
+                          <Mail className="w-4 h-4" />
+                          <span className="truncate">{employee.email}</span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Calendar className="w-4 h-4" />
+                          <span>Started {employee.startDate}</span>
+                        </div>
+                        {employee.managerId && (
+                          <div className="flex items-center space-x-2">
+                            <Users className="w-4 h-4" />
+                            <span className="truncate">
+                              Reports to: {(() => {
+                                const manager = employees.find(emp => emp.id === employee.managerId);
+                                return manager ? `${manager.firstName} ${manager.lastName}` : 'Unknown';
+                              })()}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {employee.onboardingProgress !== undefined && (
+                        <div className="mt-3 pt-3 border-t border-gray-100">
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="text-xs text-slate-500">Onboarding Progress</span>
+                            <span className="text-xs font-medium text-slate-700">{employee.onboardingProgress}%</span>
+                          </div>
+                          <div className="w-full bg-slate-100 rounded-full h-2">
+                            <div 
+                              className="bg-gradient-to-r from-blue-400 to-blue-500 h-2 rounded-full transition-all duration-300"
+                              style={{ width: `${employee.onboardingProgress}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="space-y-6 sm:space-y-8">
       {/* Header */}
@@ -314,7 +503,10 @@ const OrgChart: React.FC = () => {
                 )}
 
                 {/* View organigram link */}
-                <button className="w-full p-2 bg-white/50 hover:bg-white/70 rounded-xl transition-colors border border-white/50 text-center">
+                <button 
+                  onClick={() => viewDepartmentDetails(department.name)}
+                  className="w-full p-2 bg-white/50 hover:bg-white/70 rounded-xl transition-colors border border-white/50 text-center"
+                >
                   <span className="text-xs text-slate-600 font-medium">View organigram</span>
                 </button>
               </div>
