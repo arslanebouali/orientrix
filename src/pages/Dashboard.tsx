@@ -11,7 +11,9 @@ import {
   CheckCircle2,
   ArrowRight,
   Calendar,
-  Target
+  Target,
+  GraduationCap,
+  Sitemap
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useSelector } from 'react-redux';
