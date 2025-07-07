@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
-import { Employee } from '../types';
+import { Employee, OrgNode } from '../types';
 import { 
   Users, 
   Mail, 
@@ -15,7 +15,8 @@ import {
   Target,
   MoreHorizontal,
   ChevronDown,
-  Building2
+  Building2,
+  ArrowDown
 } from 'lucide-react';
 
 interface DepartmentGroup {
@@ -32,7 +33,7 @@ const OrgChart: React.FC = () => {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [expandedDepartments, setExpandedDepartments] = useState<Set<string>>(new Set());
   const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'board' | 'detailed'>('board');
+  const [viewMode, setViewMode] = useState<'board' | 'detailed' | 'organigram'>('board');
 
   // Department colors
   const departmentColors = {
@@ -122,7 +123,7 @@ const OrgChart: React.FC = () => {
 
   const viewDepartmentDetails = (deptName: string) => {
     setSelectedDepartment(deptName);
-    setViewMode('detailed');
+    setViewMode('organigram');
   };
 
   const backToBoard = () => {
@@ -150,11 +151,205 @@ const OrgChart: React.FC = () => {
     return Target;
   };
 
+  // Build hierarchical tree for organigram
+  const buildOrgTree = (departmentEmployees: Employee[]): OrgNode[] => {
+    const employeeMap = new Map<string, Employee>();
+    departmentEmployees.forEach(emp => employeeMap.set(emp.id, emp));
+
+    // Find root nodes (employees with no manager or manager not in this department)
+    const rootEmployees = departmentEmployees.filter(emp => 
+      !emp.managerId || !employeeMap.has(emp.managerId)
+    );
+
+    // Build tree recursively
+    const buildNode = (employee: Employee, level: number = 0): OrgNode => {
+      const children = departmentEmployees
+        .filter(emp => emp.managerId === employee.id)
+        .map(child => buildNode(child, level + 1));
+
+      return {
+        employee,
+        children,
+        level,
+        x: 0,
+        y: 0,
+        width: 200
+      };
+    };
+
+    return rootEmployees.map(emp => buildNode(emp));
+  };
+
+  // Calculate positions for tree layout
+  const calculatePositions = (nodes: OrgNode[], startX: number = 0): number => {
+    let currentX = startX;
+    
+    nodes.forEach(node => {
+      if (node.children.length === 0) {
+        // Leaf node
+        node.x = currentX;
+        currentX += node.width + 50;
+      } else {
+        // Parent node - position children first
+        const childrenWidth = calculatePositions(node.children, currentX);
+        const childrenStart = currentX;
+        const childrenEnd = currentX + childrenWidth - 50;
+        
+        // Center parent over children
+        node.x = (childrenStart + childrenEnd) / 2 - node.width / 2;
+        currentX += childrenWidth;
+      }
+      
+      node.y = node.level * 150;
+    });
+
+    return currentX - startX;
+  };
+
+  // Render organigram tree
+  const renderOrgTree = (nodes: OrgNode[]) => {
+    const allNodes: OrgNode[] = [];
+    const connections: { from: OrgNode; to: OrgNode }[] = [];
+
+    const collectNodes = (nodeList: OrgNode[]) => {
+      nodeList.forEach(node => {
+        allNodes.push(node);
+        node.children.forEach(child => {
+          connections.push({ from: node, to: child });
+        });
+        collectNodes(node.children);
+      });
+    };
+
+    collectNodes(nodes);
+    calculatePositions(nodes);
+
+    const maxX = Math.max(...allNodes.map(n => n.x + n.width));
+    const maxY = Math.max(...allNodes.map(n => n.y)) + 100;
+
+    return (
+      <div className="relative bg-white rounded-xl border border-gray-100 p-8 overflow-auto">
+        <svg 
+          width={Math.max(maxX + 100, 800)} 
+          height={maxY + 100}
+          className="absolute top-0 left-0 pointer-events-none"
+        >
+          {/* Render connection lines */}
+          {connections.map((conn, index) => (
+            <g key={index}>
+              {/* Vertical line from parent */}
+              <line
+                x1={conn.from.x + conn.from.width / 2 + 32}
+                y1={conn.from.y + 80 + 32}
+                x2={conn.from.x + conn.from.width / 2 + 32}
+                y2={conn.from.y + 80 + 75}
+                stroke="#e2e8f0"
+                strokeWidth="2"
+              />
+              {/* Horizontal line */}
+              <line
+                x1={Math.min(conn.from.x + conn.from.width / 2, conn.to.x + conn.to.width / 2) + 32}
+                y1={conn.from.y + 80 + 75}
+                x2={Math.max(conn.from.x + conn.from.width / 2, conn.to.x + conn.to.width / 2) + 32}
+                y2={conn.from.y + 80 + 75}
+                stroke="#e2e8f0"
+                strokeWidth="2"
+              />
+              {/* Vertical line to child */}
+              <line
+                x1={conn.to.x + conn.to.width / 2 + 32}
+                y1={conn.from.y + 80 + 75}
+                x2={conn.to.x + conn.to.width / 2 + 32}
+                y2={conn.to.y + 32}
+                stroke="#e2e8f0"
+                strokeWidth="2"
+              />
+            </g>
+          ))}
+        </svg>
+
+        {/* Render employee nodes */}
+        {allNodes.map((node) => {
+          const RoleIcon = getRoleIcon(node.employee.role);
+          const isManager = node.employee.role.toLowerCase().includes('manager') || 
+                           node.employee.role.toLowerCase().includes('director') ||
+                           node.employee.role.toLowerCase().includes('ceo');
+          
+          return (
+            <div
+              key={node.employee.id}
+              className="absolute pointer-events-auto"
+              style={{
+                left: node.x + 32,
+                top: node.y + 32,
+                width: node.width
+              }}
+              onMouseEnter={(e) => handleMouseEnter(node.employee, e)}
+              onMouseLeave={handleMouseLeave}
+            >
+              <div className={`bg-white border-2 rounded-xl p-4 shadow-lg hover:shadow-xl transition-all duration-200 cursor-pointer ${
+                isManager ? 'border-amber-300 bg-gradient-to-br from-amber-50 to-orange-50' : 'border-blue-300 bg-gradient-to-br from-blue-50 to-slate-50'
+              }`}>
+                <div className="flex flex-col items-center space-y-3">
+                  <div className={`relative w-16 h-16 rounded-2xl flex items-center justify-center text-white font-bold text-lg shadow-lg ${
+                    isManager 
+                      ? 'bg-gradient-to-br from-amber-500 to-orange-600' 
+                      : 'bg-gradient-to-br from-blue-500 to-blue-600'
+                  } ${getStatusColor(node.employee.status)}`}>
+                    {node.employee.firstName[0]}{node.employee.lastName[0]}
+                    {isManager && (
+                      <div className="absolute -top-2 -right-2 w-6 h-6 bg-amber-400 rounded-full flex items-center justify-center">
+                        <Crown className="w-4 h-4 text-white" />
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="text-center">
+                    <h4 className="font-bold text-slate-800 text-sm">
+                      {node.employee.firstName} {node.employee.lastName}
+                    </h4>
+                    <p className="text-xs text-slate-600 mb-1">{node.employee.position}</p>
+                    <div className="flex items-center justify-center space-x-1">
+                      <RoleIcon className="w-3 h-3 text-slate-400" />
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        node.employee.status === 'active' ? 'bg-emerald-100 text-emerald-700' :
+                        node.employee.status === 'onboarding' ? 'bg-blue-100 text-blue-700' :
+                        node.employee.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                        'bg-slate-100 text-slate-700'
+                      }`}>
+                        {node.employee.status}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  {node.employee.onboardingProgress !== undefined && (
+                    <div className="w-full">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-xs text-slate-500">Progress</span>
+                        <span className="text-xs font-medium text-slate-700">{node.employee.onboardingProgress}%</span>
+                      </div>
+                      <div className="w-full bg-slate-100 rounded-full h-1.5">
+                        <div 
+                          className="bg-gradient-to-r from-blue-400 to-blue-500 h-1.5 rounded-full transition-all duration-300"
+                          style={{ width: `${node.employee.onboardingProgress}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
   // Detailed Department View
-  if (viewMode === 'detailed' && selectedDepartment) {
+  if (viewMode === 'organigram' && selectedDepartment) {
     const department = departmentGroups.find(dept => dept.name === selectedDepartment);
     if (!department) return null;
 
+    const orgTree = buildOrgTree(department.employees);
     return (
       <div className="space-y-6 sm:space-y-8">
         {/* Header with Back Button */}
@@ -167,8 +362,8 @@ const OrgChart: React.FC = () => {
             <span>Back to Overview</span>
           </button>
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">{department.name} Department</h1>
-            <p className="text-slate-600 mt-1">Detailed organizational structure and team members</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">{department.name} Organigram</h1>
+            <p className="text-slate-600 mt-1">Hierarchical organizational chart showing reporting relationships</p>
           </div>
         </div>
 
@@ -253,74 +448,96 @@ const OrgChart: React.FC = () => {
           </div>
         )}
 
-        {/* Team Members Grid */}
+        {/* Organigram Chart */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100">
           <div className="p-6 border-b border-gray-100">
-            <h3 className="text-lg font-semibold text-slate-800">Team Members</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-slate-800">Organizational Structure</h3>
+              <div className="flex items-center space-x-4 text-sm text-slate-600">
+                <div className="flex items-center space-x-2">
+                  <Crown className="w-4 h-4 text-amber-500" />
+                  <span>Manager</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Target className="w-4 h-4 text-blue-500" />
+                  <span>Team Member</span>
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {department.employees
-                .filter(emp => emp.id !== department.manager?.id)
-                .map((employee) => {
-                  const RoleIcon = getRoleIcon(employee.role);
-                  return (
-                    <div
-                      key={employee.id}
-                      className="border border-gray-100 rounded-xl p-4 hover:shadow-md transition-all duration-200"
-                    >
-                      <div className="flex items-center space-x-3 mb-3">
-                        <div className={`relative w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center text-white font-semibold shadow-sm ${getStatusColor(employee.status)}`}>
-                          {employee.firstName[0]}{employee.lastName[0]}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-semibold text-slate-800 truncate">
-                            {employee.firstName} {employee.lastName}
-                          </h4>
-                          <p className="text-sm text-slate-600 truncate">{employee.position}</p>
-                        </div>
-                        <RoleIcon className="w-5 h-5 text-slate-400" />
-                      </div>
-                      
-                      <div className="space-y-2 text-sm text-slate-500">
-                        <div className="flex items-center space-x-2">
-                          <Mail className="w-4 h-4" />
-                          <span className="truncate">{employee.email}</span>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Calendar className="w-4 h-4" />
-                          <span>Started {employee.startDate}</span>
-                        </div>
-                        {employee.managerId && (
-                          <div className="flex items-center space-x-2">
-                            <Users className="w-4 h-4" />
-                            <span className="truncate">
-                              Reports to: {(() => {
-                                const manager = employees.find(emp => emp.id === employee.managerId);
-                                return manager ? `${manager.firstName} ${manager.lastName}` : 'Unknown';
-                              })()}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                      
-                      {employee.onboardingProgress !== undefined && (
-                        <div className="mt-3 pt-3 border-t border-gray-100">
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="text-xs text-slate-500">Onboarding Progress</span>
-                            <span className="text-xs font-medium text-slate-700">{employee.onboardingProgress}%</span>
-                          </div>
-                          <div className="w-full bg-slate-100 rounded-full h-2">
-                            <div 
-                              className="bg-gradient-to-r from-blue-400 to-blue-500 h-2 rounded-full transition-all duration-300"
-                              style={{ width: `${employee.onboardingProgress}%` }}
-                            ></div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+          <div className="p-6 overflow-auto">
+            {orgTree.length > 0 ? (
+              renderOrgTree(orgTree)
+            ) : (
+              <div className="text-center py-12">
+                <Building2 className="w-12 h-12 text-slate-400 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-slate-800 mb-2">No Organizational Structure</h3>
+                <p className="text-slate-600">No reporting relationships found for this department.</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Additional Department Info */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Quick Stats */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h3 className="text-lg font-semibold text-slate-800 mb-4">Department Insights</h3>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-600">Reporting Levels</span>
+                <span className="font-semibold text-slate-800">
+                  {Math.max(...orgTree.map(node => {
+                    const getMaxLevel = (n: OrgNode): number => {
+                      if (n.children.length === 0) return n.level;
+                      return Math.max(...n.children.map(getMaxLevel));
+                    };
+                    return getMaxLevel(node);
+                  }), 0) + 1}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-600">Direct Reports to Manager</span>
+                <span className="font-semibold text-slate-800">
+                  {department.manager ? 
+                    department.employees.filter(emp => emp.managerId === department.manager?.id).length : 
+                    0
+                  }
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-600">Average Onboarding</span>
+                <span className="font-semibold text-slate-800">
+                  {Math.round(department.employees.reduce((acc, emp) => acc + (emp.onboardingProgress || 0), 0) / department.employees.length)}%
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Team Contacts */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h3 className="text-lg font-semibold text-slate-800 mb-4">Key Contacts</h3>
+            <div className="space-y-3">
+              {department.employees.slice(0, 4).map((employee) => (
+                <div key={employee.id} className="flex items-center space-x-3">
+                  <div className={`w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center text-white font-semibold text-xs ${getStatusColor(employee.status)}`}>
+                    {employee.firstName[0]}{employee.lastName[0]}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-800 truncate">
+                      {employee.firstName} {employee.lastName}
+                    </p>
+                    <p className="text-xs text-slate-500 truncate">{employee.email}</p>
+                  </div>
+                  <div className="text-xs text-slate-400">
+                    {employee.role.toLowerCase().includes('manager') || employee.role.toLowerCase().includes('director') ? (
+                      <Crown className="w-4 h-4 text-amber-500" />
+                    ) : (
+                      <Target className="w-4 h-4" />
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
