@@ -9,14 +9,9 @@ import Onboarding from './components/Onboarding';
 import AccessManagement from './components/AccessManagement';
 import Documentation from './components/Documentation';
 import Settings from './components/Settings';
+import OrgChart from './components/OrgChart';
 
 // Placeholder components for new routes
-const OrgChart = () => (
-  <div className="text-center py-12">
-    <h2 className="text-2xl font-bold text-slate-800 mb-4">Organization Chart</h2>
-    <p className="text-slate-600">Interactive organization chart coming soon...</p>
-  </div>
-);
 
 const Templates = () => (
   <div className="text-center py-12">

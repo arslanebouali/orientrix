@@ -1,12 +1,27 @@
-export interface User {
+export interface Employee {
   id: string;
-  name: string;
   email: string;
+  firstName: string;
+  lastName: string;
   role: string;
   department: string;
+  position: string;
   avatar?: string;
   startDate: string;
-  status: 'active' | 'inactive' | 'pending';
+  status: 'active' | 'inactive' | 'pending' | 'onboarding';
+  companyId: string;
+  managerId?: string;
+  onboardingProgress?: number;
+  lastLogin?: string;
+}
+
+export interface OrgNode {
+  employee: Employee;
+  children: OrgNode[];
+  level: number;
+  x: number;
+  y: number;
+  width: number;
 }
 
 export interface Course {
